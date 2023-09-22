@@ -1,8 +1,9 @@
-using Amazon.DynamoDBv2.DataModel;
+using System.Text.Json;
 using Amazon.DynamoDBv2.DocumentModel;
+using Amazon.DynamoDBv2.Model;
 using Amazon.Lambda.Core;
 using Amazon.Lambda.DynamoDBEvents;
-using Amazon.DynamoDBv2.Model;
+using DocumentProcessor.Pdf.Models;
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
@@ -11,8 +12,6 @@ namespace DocumentProcessor.Pdf;
 
 public class Function
 {
-    private readonly DynamoDBContext _context;
-
     public void FunctionHandler(DynamoDBEvent dynamoEvent, ILambdaContext context)
     {
         context.Logger.LogInformation($"Beginning to process {dynamoEvent.Records.Count} records...");
@@ -21,16 +20,17 @@ public class Function
         {
             context.Logger.LogInformation($"Event ID: {record.EventID}");
             context.Logger.LogInformation($"Event Name: {record.EventName}");
-            
-            // TODO: Add business logic processing the record.Dynamodb object.
+
+            var request = Deserialize(record.Dynamodb.NewImage);
+
         }
 
         context.Logger.LogInformation("Stream processing complete.");
     }
-    
-    private T GetObject<T>(Dictionary<string, AttributeValue> image)
+
+    public DocumentRequest? Deserialize(Dictionary<string, AttributeValue> image)
     {
-        var document = Document.FromAttributeMap(image);
-        return _context.FromDocument<T>(document);
+        var json = Document.FromAttributeMap(image).ToJson(); // Make this normal JSON because DynamoDB sucks...
+        return JsonSerializer.Deserialize<DocumentRequest>(json, new JsonSerializerOptions{ PropertyNameCaseInsensitive = true });
     }
 }
