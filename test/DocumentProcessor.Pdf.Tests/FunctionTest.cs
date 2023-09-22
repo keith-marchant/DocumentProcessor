@@ -12,7 +12,7 @@ namespace DocumentProcessor.Pdf.Tests;
 public class FunctionTest
 {
     [Fact]
-    public void TestFunction()
+    public async Task TestFunction()
     {
         // Arrange
         var @event = GetEvent();
@@ -20,7 +20,7 @@ public class FunctionTest
         var function = new Function();
         
         // Act
-        function.FunctionHandler(@event, context);
+        await function.FunctionHandler(@event, context);
 
         // Assert
         var testLogger = context.Logger as TestLambdaLogger;
@@ -49,7 +49,7 @@ public class FunctionTest
         actual.Should().BeEquivalentTo(expected);
     }
 
-    private DynamoDBEvent GetEvent()
+    private static DynamoDBEvent GetEvent()
     {
         return new DynamoDBEvent
         {
