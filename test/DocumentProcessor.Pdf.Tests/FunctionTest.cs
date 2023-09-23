@@ -35,11 +35,12 @@ public class FunctionTest
         var function = new Function();
         var expected = new DocumentRequest(
             "b11a1261-4622-412a-952b-dce121c0eb0c",
+            DocumentRequestStatus.Submitted,
             new List<DocumentFile>(),
             new List<DocumentUrl>
             {
                 new DocumentUrl(DocumentType.DocX,
-                    "https://file-examples.com/wp-content/storage/2017/02/file-sample_100kB.docx")
+                    "https://grpc-files.s3.ap-southeast-2.amazonaws.com/Sample-Word-Report.docx")
             });
         
         // Act
@@ -72,11 +73,12 @@ public class FunctionTest
                                     M = new Dictionary<string, AttributeValue>
                                     {
                                         { "type", new AttributeValue{ N = "2" } },
-                                        { "url", new AttributeValue{ S = "https://file-examples.com/wp-content/storage/2017/02/file-sample_100kB.docx" } }
+                                        { "url", new AttributeValue{ S = "https://grpc-files.s3.ap-southeast-2.amazonaws.com/Sample-Word-Report.docx" } }
                                     }
                                 }
                             } } },
-                            { "files", new AttributeValue{ L = new List<AttributeValue>() } }
+                            { "files", new AttributeValue{ L = new List<AttributeValue>() } },
+                            { "status", new AttributeValue { N = "0" } }
                         },
                         StreamViewType = StreamViewType.NEW_IMAGE
                     }

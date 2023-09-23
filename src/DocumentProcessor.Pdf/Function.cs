@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Amazon;
+using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DocumentModel;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Lambda.Core;
@@ -18,9 +19,11 @@ public class Function
     // TODO: DI this
     private static readonly HttpClient DownloadClient = new HttpClient();
     private static readonly RegionEndpoint BucketRegion = RegionEndpoint.APSoutheast2;
-    private static IAmazonS3 _s3Client = new AmazonS3Client(BucketRegion);
-    private static readonly string BucketName = "kmarchant-document-manager-test";
-    
+    private static readonly IAmazonS3 S3Client = new AmazonS3Client(BucketRegion);
+    private static readonly AmazonDynamoDBClient DbClient = new AmazonDynamoDBClient();
+    private const string BucketName = "kmarchant-document-manager-test";
+    private const string TableName = "tbl_pdf_requests";
+
     public async Task FunctionHandler(DynamoDBEvent dynamoEvent, ILambdaContext context)
     {
         context.Logger.LogInformation($"Beginning to process {dynamoEvent.Records.Count} records...");
@@ -36,25 +39,55 @@ public class Function
             {
                 throw new InvalidDataException("Unable to read dynamoEvent");
             }
-
-            foreach (var url in request.Urls)
+            
+            try
             {
-                // TODO: Parallelize
-                await using var responseStream = await DownloadClient.GetStreamAsync(url.Url);
-                using var documentStream = new MemoryStream();
-                await responseStream.CopyToAsync(documentStream);
-                // TODO: Refactor to separate method and handle different file types
-                var doc = new Aspose.Words.Document(documentStream);
-                using var pdfStream = new MemoryStream();
-                var pdfSaveOptions = new PdfSaveOptions { DisplayDocTitle = true };
-                doc.Save(pdfStream, pdfSaveOptions);
-                // TODO: Work out combining documents
-                // TODO: Use a better naming scheme
-                await _s3Client.UploadObjectFromStreamAsync(BucketName, request.RequestId, pdfStream, null);
+                await UpdateDbStatus(request.RequestId, DocumentRequestStatus.Processing);
+
+                foreach (var url in request.Urls)
+                {
+                    // TODO: Parallelize
+                    await using var responseStream = await DownloadClient.GetStreamAsync(url.Url);
+                    using var documentStream = new MemoryStream();
+                    await responseStream.CopyToAsync(documentStream);
+                    // TODO: Refactor to separate method and handle different file types
+                    var doc = new Aspose.Words.Document(documentStream);
+                    using var pdfStream = new MemoryStream();
+                    var pdfSaveOptions = new PdfSaveOptions { DisplayDocTitle = true };
+                    doc.Save(pdfStream, pdfSaveOptions);
+                    // TODO: Work out combining documents
+                    // TODO: Use a better naming scheme
+                    await S3Client.UploadObjectFromStreamAsync(BucketName, request.RequestId, pdfStream, null);
+                    await UpdateDbStatus(request.RequestId, DocumentRequestStatus.Complete);
+                }
+            }
+            catch (Exception ex)
+            {
+                await UpdateDbStatus(request.RequestId, DocumentRequestStatus.Error);
             }
         }
 
         context.Logger.LogInformation("Stream processing complete.");
+    }
+
+    private async Task UpdateDbStatus(string requestId, DocumentRequestStatus newStatus, string error = "")
+    {
+        var updateRequest = new UpdateItemRequest
+        {
+            TableName = TableName,
+            Key = new Dictionary<string, AttributeValue>{ { "requestId", new AttributeValue{ S = requestId } } },
+            ExpressionAttributeNames = new Dictionary<string, string>
+            {
+                { "#S", "status" },
+            },
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                { ":status", new AttributeValue { N = $"{(int)newStatus}"} },    
+            },
+            UpdateExpression = "SET #S = :status",
+        };
+
+        await DbClient.UpdateItemAsync(updateRequest);
     }
 
     public DocumentRequest? Deserialize(Dictionary<string, AttributeValue> image)
